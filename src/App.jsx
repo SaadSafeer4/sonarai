@@ -323,10 +323,16 @@ const App = () => {
     
     const recognition = new SpeechRecognition();
     
-    recognition.continuous = false;
+    recognition.continuous = true;  // Keep listening until we stop it
     recognition.interimResults = true;
     recognition.lang = 'en-US';
     recognition.maxAlternatives = 1;
+    
+    // Auto-stop after 10 seconds of listening
+    const timeoutId = setTimeout(() => {
+      log('Stopping after timeout', 'info');
+      recognition.stop();
+    }, 10000);
     
     recognition.onstart = () => {
       log('Speech recognition started', 'speech');
@@ -346,8 +352,10 @@ const App = () => {
       }
       
       setTranscript(finalTranscript || interimTranscript);
+      log(`Transcript: "${finalTranscript || interimTranscript}"`, 'speech');
       
       if (finalTranscript) {
+        clearTimeout(timeoutId);
         log(`Final transcript: "${finalTranscript}"`, 'speech');
         recognition.stop();
         processUserInput(finalTranscript);
@@ -355,20 +363,33 @@ const App = () => {
     };
     
     recognition.onerror = (event) => {
+      clearTimeout(timeoutId);
       log(`Speech error: ${event.error}`, 'error');
+      
+      // Don't reset state for "no-speech" in continuous mode - keep listening
+      if (event.error === 'no-speech') {
+        // This is normal in continuous mode, just keep listening
+        log('No speech detected, continuing to listen...', 'info');
+        return;
+      }
+      
       setIsListening(false);
       setCurrentStatus('Ready');
       
-      if (event.error === 'no-speech') {
-        speak("I didn't hear anything. Tap the button and try again.");
-      } else if (event.error === 'not-allowed') {
+      if (event.error === 'not-allowed') {
         speak('Please allow microphone access in your browser settings.');
       } else if (event.error === 'network') {
         speak('Network error. Please check your internet connection.');
+      } else if (event.error === 'aborted') {
+        // User or system aborted, don't announce
+        log('Recognition aborted', 'info');
+      } else {
+        speak('Something went wrong. Please try again.');
       }
     };
     
     recognition.onend = () => {
+      clearTimeout(timeoutId);
       log('Speech recognition ended', 'info');
       setIsListening(false);
       if (!isProcessing) {
