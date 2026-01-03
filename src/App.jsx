@@ -284,37 +284,25 @@ const App = () => {
   // ============================================
   // SPEECH RECOGNITION - Voice Input
   // ============================================
-  const startListening = useCallback(async () => {
+  const startListening = useCallback(() => {
+    log('Button tapped - starting speech recognition', 'info');
+    
     // Check for speech recognition support
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      log('Speech recognition not supported', 'error');
       speak('Speech recognition is not supported in this browser. Try Chrome or Safari.');
       return;
     }
     
-    // Request microphone permission explicitly on mobile
+    // Set listening state IMMEDIATELY for visual feedback
+    setIsListening(true);
+    setTranscript('');
+    setCurrentStatus('Listening...');
+    
+    // Play audio feedback
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      log('Microphone permission granted', 'success');
-    } catch (err) {
-      log(`Microphone error: ${err.message}`, 'error');
-      speak('Please allow microphone access to use voice commands.');
-      return;
-    }
-    
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    
-    recognition.onstart = () => {
-      setIsListening(true);
-      setTranscript('');
-      setCurrentStatus('Listening...');
-      log('Speech recognition started', 'speech');
-      
-      // Audio feedback - a soft "listening" sound
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
@@ -329,6 +317,19 @@ const App = () => {
       
       oscillator.start(audioCtx.currentTime);
       oscillator.stop(audioCtx.currentTime + 0.2);
+    } catch (e) {
+      // Audio feedback is optional, continue without it
+    }
+    
+    const recognition = new SpeechRecognition();
+    
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
+    
+    recognition.onstart = () => {
+      log('Speech recognition started', 'speech');
     };
     
     recognition.onresult = (event) => {
@@ -360,10 +361,15 @@ const App = () => {
       
       if (event.error === 'no-speech') {
         speak("I didn't hear anything. Tap the button and try again.");
+      } else if (event.error === 'not-allowed') {
+        speak('Please allow microphone access in your browser settings.');
+      } else if (event.error === 'network') {
+        speak('Network error. Please check your internet connection.');
       }
     };
     
     recognition.onend = () => {
+      log('Speech recognition ended', 'info');
       setIsListening(false);
       if (!isProcessing) {
         setCurrentStatus('Ready');
@@ -371,7 +377,16 @@ const App = () => {
     };
     
     recognitionRef.current = recognition;
-    recognition.start();
+    
+    try {
+      recognition.start();
+      log('Recognition.start() called', 'info');
+    } catch (err) {
+      log(`Failed to start recognition: ${err.message}`, 'error');
+      setIsListening(false);
+      setCurrentStatus('Ready');
+      speak('Could not start speech recognition. Please try again.');
+    }
   }, [speak, processUserInput, isProcessing, log]);
 
   // Initialize on mount
@@ -441,14 +456,13 @@ const App = () => {
         {/* Large speak button - Main interaction */}
         <button
           className={`speak-button ${isListening ? 'listening' : ''} ${isProcessing ? 'processing' : ''}`}
-          onClick={startListening}
-          onTouchEnd={(e) => {
-            e.preventDefault(); // Prevent double-firing on mobile
+          onPointerDown={(e) => {
+            // Use pointerdown for fastest response on both touch and mouse
+            e.preventDefault();
             if (!isListening && !isProcessing) {
               startListening();
             }
           }}
-          disabled={isListening || isProcessing}
           aria-label="Tap to speak"
         >
           <div className="button-content">
