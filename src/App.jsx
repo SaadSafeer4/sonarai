@@ -109,10 +109,11 @@ const App = () => {
       return true;
     } catch (error) {
       log(`Camera error: ${error.message}`, 'error');
-      await speak('Could not access camera. Please allow camera permissions.');
+      // Don't block the app if camera fails - voice features still work
+      console.warn('Camera not available, continuing without video');
       return false;
     }
-  }, [log, speak]);
+  }, [log]);
 
   // ============================================
   // WHERE THE WEBCAM IMAGE IS CAPTURED
@@ -283,9 +284,20 @@ const App = () => {
   // ============================================
   // SPEECH RECOGNITION - Voice Input
   // ============================================
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
+    // Check for speech recognition support
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      speak('Speech recognition is not supported in this browser.');
+      speak('Speech recognition is not supported in this browser. Try Chrome or Safari.');
+      return;
+    }
+    
+    // Request microphone permission explicitly on mobile
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      log('Microphone permission granted', 'success');
+    } catch (err) {
+      log(`Microphone error: ${err.message}`, 'error');
+      speak('Please allow microphone access to use voice commands.');
       return;
     }
     
@@ -430,6 +442,12 @@ const App = () => {
         <button
           className={`speak-button ${isListening ? 'listening' : ''} ${isProcessing ? 'processing' : ''}`}
           onClick={startListening}
+          onTouchEnd={(e) => {
+            e.preventDefault(); // Prevent double-firing on mobile
+            if (!isListening && !isProcessing) {
+              startListening();
+            }
+          }}
           disabled={isListening || isProcessing}
           aria-label="Tap to speak"
         >

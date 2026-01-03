@@ -190,6 +190,11 @@ body {
   box-shadow: var(--shadow-glow), var(--shadow-deep);
   outline: none;
   flex-shrink: 0;
+  /* Mobile touch improvements */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .speak-button:hover:not(:disabled) {
@@ -200,7 +205,16 @@ body {
 }
 
 .speak-button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.95);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.5), var(--shadow-deep);
+}
+
+/* Better mobile touch feedback */
+@media (hover: none) and (pointer: coarse) {
+  .speak-button:active:not(:disabled) {
+    transform: scale(0.92);
+    background: var(--accent-primary);
+  }
 }
 
 .speak-button:disabled {
