@@ -402,18 +402,24 @@ const App = () => {
 
   return (
     <div className="app">
-      {/* Hidden video and canvas for capture */}
-      <video 
-        ref={videoRef} 
-        autoPlay 
-        playsInline 
-        muted 
-        className="hidden-video"
-      />
       <canvas ref={canvasRef} className="hidden-canvas" />
       
       {/* Main UI - Optimized for accessibility */}
       <div className="container">
+        {/* Camera preview */}
+        <div className="camera-container">
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className="camera-preview"
+          />
+          <div className="camera-overlay">
+            <span>📷 Live Camera</span>
+          </div>
+        </div>
+        
         {/* Status indicator */}
         <div className="status-bar">
           <div className={`status-dot ${isListening ? 'listening' : isProcessing ? 'processing' : 'ready'}`} />

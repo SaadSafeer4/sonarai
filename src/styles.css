@@ -73,8 +73,44 @@ body {
     var(--bg-primary);
 }
 
-/* Hidden elements for capture */
-.hidden-video,
+/* Camera preview */
+.camera-container {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-deep);
+  background: var(--bg-secondary);
+  margin: 0 auto;
+}
+
+.camera-preview {
+  width: 100%;
+  height: auto;
+  display: block;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  background: var(--bg-primary);
+}
+
+.camera-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Hidden canvas for capture */
 .hidden-canvas {
   position: absolute;
   opacity: 0;
@@ -89,12 +125,13 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 24px;
   max-width: 600px;
   margin: 0 auto;
   width: 100%;
-  gap: 24px;
+  gap: 20px;
+  overflow-y: auto;
 }
 
 /* Status bar */
@@ -142,8 +179,8 @@ body {
 
 /* Main speak button */
 .speak-button {
-  width: 220px;
-  height: 220px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
   border: none;
   background: var(--gradient-glow);
@@ -152,6 +189,7 @@ body {
   position: relative;
   box-shadow: var(--shadow-glow), var(--shadow-deep);
   outline: none;
+  flex-shrink: 0;
 }
 
 .speak-button:hover:not(:disabled) {
@@ -189,7 +227,7 @@ body {
 }
 
 .mic-icon {
-  font-size: 64px;
+  font-size: 48px;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
   transition: var(--transition-normal);
 }
@@ -468,20 +506,24 @@ body {
 @media (max-width: 480px) {
   .container {
     padding: 16px;
-    gap: 16px;
+    gap: 12px;
+  }
+  
+  .camera-container {
+    max-width: 100%;
   }
   
   .speak-button {
-    width: 180px;
-    height: 180px;
+    width: 140px;
+    height: 140px;
   }
   
   .mic-icon {
-    font-size: 48px;
+    font-size: 40px;
   }
   
   .button-label {
-    font-size: 16px;
+    font-size: 14px;
   }
   
   .response-text {
