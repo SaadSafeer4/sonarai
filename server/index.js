@@ -1,24 +1,19 @@
 import express from 'express';
 import cors from 'cors';
 import Groq from 'groq-sdk';
+import Together from 'together-ai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const app = express();
 const PORT = 3001;
-const API_KEY = process.env.GROQ_API_KEY;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-if (!API_KEY) {
-  console.warn('\n⚠️  No Groq API key found!');
-  console.warn('   Get one at: https://console.groq.com/keys');
-  console.warn('   Add to .env: GROQ_API_KEY=your_key\n');
-}
-
-const groq = new Groq({ apiKey: API_KEY || 'MISSING' });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'MISSING' });
+const together = new Together({ apiKey: process.env.TOGETHER_API_KEY || 'MISSING' });
 
 const VISION_PROMPT = `Describe this scene for a blind person in 2-3 sentences.
 Focus on spatial layout and obstacles. Use directional language (left, right, ahead).
@@ -28,13 +23,14 @@ const SYSTEM_PROMPT = `You are a helpful assistant for a blind person using smar
 Be concise (1-3 sentences). Use spatial language. Say "I notice" instead of "I see".
 You have access to the most recent scene description to answer follow-up questions.`;
 
+// Vision - Together AI (free Llama Vision)
 app.post('/api/analyze', async (req, res) => {
   try {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: 'No image provided' });
 
-    const result = await groq.chat.completions.create({
-      model: 'llama-3.2-11b-vision-preview',
+    const result = await together.chat.completions.create({
+      model: 'meta-llama/Llama-Vision-Free',
       messages: [
         {
           role: 'user',
@@ -56,6 +52,7 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
+// Chat - Groq (fast Llama)
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, sceneContext, conversationHistory = [] } = req.body;
