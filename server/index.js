@@ -34,7 +34,7 @@ app.post('/api/analyze', async (req, res) => {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: 'No image provided' });
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const base64 = image.replace(/^data:image\/\w+;base64,/, '');
     
     const result = await model.generateContent([
@@ -60,7 +60,7 @@ app.post('/api/chat', async (req, res) => {
     const { message, sceneContext, conversationHistory = [] } = req.body;
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     
     let prompt = CHAT_PROMPT;
     if (sceneContext) prompt += `\n\nScene: "${sceneContext}"`;

@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     
     let prompt = CHAT_PROMPT;
     if (sceneContext) prompt += `\n\nScene: "${sceneContext}"`;

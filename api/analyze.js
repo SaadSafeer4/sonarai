@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     if (!image) return res.status(400).json({ error: 'No image provided' });
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const base64 = image.replace(/^data:image\/\w+;base64,/, '');
     
     const result = await model.generateContent([
