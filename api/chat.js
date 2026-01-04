@@ -1,52 +1,47 @@
-const SYSTEM_PROMPT = `You are a helpful assistant for a blind person using smart glasses.
-Be concise (1-3 sentences). Use spatial language. Say "I notice" instead of "I see".
-You have access to the most recent scene description to answer follow-up questions.`;
+const SYSTEM_PROMPT = `You are a helpful assistant for a blind person. Be concise (1-3 sentences). Use spatial language.`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.HF_TOKEN;
   if (!apiKey) {
-    return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
+    return res.status(500).json({ error: 'HF_TOKEN not configured' });
   }
 
   try {
-    const { message, sceneContext, conversationHistory = [] } = req.body;
+    const { message, sceneContext } = req.body;
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
-    let systemContent = SYSTEM_PROMPT;
-    if (sceneContext) systemContent += `\n\nCurrent scene: "${sceneContext}"`;
-    else systemContent += '\n\nNo scene captured yet.';
+    let prompt = SYSTEM_PROMPT;
+    if (sceneContext) prompt += `\n\nScene: ${sceneContext}`;
+    prompt += `\n\nUser: ${message}\nAssistant:`;
 
-    const messages = [
-      { role: 'system', content: systemContent },
-      ...conversationHistory.slice(-4).map(h => ({ role: h.role, content: h.content })),
-      { role: 'user', content: message }
-    ];
+    const response = await fetch(
+      'https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          inputs: prompt,
+          parameters: { max_new_tokens: 150, return_full_text: false }
+        })
+      }
+    );
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'qwen/qwen-2-7b-instruct:free',
-        messages,
-        max_tokens: 200
-      })
-    });
-
-    const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(data.error.message || JSON.stringify(data.error));
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText);
     }
 
-    const text = data.choices?.[0]?.message?.content || 'Could not generate response';
-    res.json({ response: text });
+    const data = await response.json();
+    const text = data[0]?.generated_text || 'I can help you. What would you like to know?';
+    
+    res.json({ response: text.trim() });
   } catch (err) {
     console.error('[Chat Error]', err.message);
     res.status(500).json({ error: 'Failed to generate response', details: err.message });

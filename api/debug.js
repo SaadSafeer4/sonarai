@@ -1,7 +1,7 @@
 export default function handler(req, res) {
-  const key = process.env.OPENROUTER_API_KEY;
+  const key = process.env.HF_TOKEN;
   res.json({ 
-    openrouter: key ? `${key.substring(0, 8)}... (${key.length} chars)` : 'NOT SET'
+    hf_token: key ? `${key.substring(0, 8)}... (${key.length} chars)` : 'NOT SET'
   });
 }
 
