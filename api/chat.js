@@ -14,12 +14,12 @@ export default async function handler(req, res) {
     const { message, sceneContext } = req.body;
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
-    let prompt = SYSTEM_PROMPT;
-    if (sceneContext) prompt += `\n\nScene: ${sceneContext}`;
-    prompt += `\n\nUser: ${message}\nAssistant:`;
+    let prompt = `<s>[INST] ${SYSTEM_PROMPT}`;
+    if (sceneContext) prompt += `\n\nScene description: ${sceneContext}`;
+    prompt += `\n\nUser question: ${message} [/INST]`;
 
     const response = await fetch(
-      'https://router.huggingface.co/hf-inference/models/mistralai/Mistral-7B-Instruct-v0.2',
+      'https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3',
       {
         method: 'POST',
         headers: {
@@ -28,20 +28,22 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           inputs: prompt,
-          parameters: { max_new_tokens: 150, return_full_text: false }
+          parameters: { max_new_tokens: 150 }
         })
       }
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText);
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
     }
 
-    const data = await response.json();
-    const text = data[0]?.generated_text || 'I can help you. What would you like to know?';
+    const text = data[0]?.generated_text || data.generated_text || 'I can help you navigate. What would you like to know?';
+    // Extract just the response after [/INST]
+    const cleaned = text.includes('[/INST]') ? text.split('[/INST]').pop().trim() : text;
     
-    res.json({ response: text.trim() });
+    res.json({ response: cleaned });
   } catch (err) {
     console.error('[Chat Error]', err.message);
     res.status(500).json({ error: 'Failed to generate response', details: err.message });
