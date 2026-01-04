@@ -1,7 +1,6 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 
-const Footer = () => {
+export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer__container">
@@ -13,16 +12,14 @@ const Footer = () => {
           <p className="footer__tagline">See through sound.</p>
         </div>
         
-        <div className="footer__right">
-          <a 
-            href="https://github.com/SaadSafeer4/sonarai" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="footer__link"
-          >
-            GitHub
-          </a>
-        </div>
+        <a 
+          href="https://github.com/SaadSafeer4/sonarai" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="footer__link"
+        >
+          GitHub
+        </a>
       </div>
       
       <div className="footer__bottom">
@@ -31,6 +28,4 @@ const Footer = () => {
       </div>
     </footer>
   );
-};
-
-export default Footer;
+}

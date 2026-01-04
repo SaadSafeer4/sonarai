@@ -1,51 +1,40 @@
-import React, { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useScroll, useTransform, useInView } from 'framer-motion';
 
-// Animated section wrapper
-const Section = ({ children, className = '' }) => {
+function Section({ children, className = '' }) {
   const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: '-100px' });
+  const inView = useInView(ref, { once: true, margin: '-100px' });
   
   return (
     <motion.section
       ref={ref}
       initial={{ opacity: 0, y: 60 }}
-      animate={isInView ? { opacity: 1, y: 0 } : {}}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
       className={className}
     >
       {children}
     </motion.section>
   );
-};
+}
 
-const Home = () => {
-  const containerRef = useRef(null);
+export default function Home() {
   const { scrollYProgress } = useScroll();
-  
-  // Parallax transforms
   const heroY = useTransform(scrollYProgress, [0, 0.3], [0, -100]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
 
   return (
-    <div ref={containerRef} className="home">
-      {/* Hero - Full viewport with parallax */}
-      <motion.section 
-        className="hero"
-        style={{ y: heroY }}
-      >
-        <motion.div 
-          className="hero__bg"
-          style={{ opacity: heroOpacity }}
-        />
+    <div className="home">
+      <motion.section className="hero" style={{ y: heroY }}>
+        <motion.div className="hero__bg" style={{ opacity: heroOpacity }} />
         
         <div className="hero__content">
           <motion.div
+            className="hero__tag"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className="hero__tag"
           >
             For the visually impaired
           </motion.div>
@@ -76,8 +65,7 @@ const Home = () => {
             transition={{ duration: 0.8, delay: 0.7 }}
           >
             <Link to="/demo" className="hero__cta">
-              Try the demo
-              <span className="hero__cta-arrow">→</span>
+              Try the demo <span className="hero__cta-arrow">→</span>
             </Link>
           </motion.div>
         </div>
@@ -93,60 +81,39 @@ const Home = () => {
         </motion.div>
       </motion.section>
 
-      {/* How it works - Staggered cards */}
       <Section className="how">
         <div className="how__container">
           <span className="section-tag">How it works</span>
-          <h2 className="how__title">
-            Three words.<br />
-            Complete awareness.
-          </h2>
+          <h2 className="how__title">Three words.<br />Complete awareness.</h2>
           
           <div className="how__steps">
-            <motion.div 
-              className="how__step"
-              whileHover={{ y: -8 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="how__step-num">1</div>
-              <h3>Speak</h3>
-              <p>Tap the button and ask "What's around me?"</p>
-            </motion.div>
-            
-            <motion.div 
-              className="how__step"
-              whileHover={{ y: -8 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="how__step-num">2</div>
-              <h3>Capture</h3>
-              <p>Your camera takes a snapshot of the scene.</p>
-            </motion.div>
-            
-            <motion.div 
-              className="how__step"
-              whileHover={{ y: -8 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="how__step-num">3</div>
-              <h3>Listen</h3>
-              <p>Hear a clear description of your surroundings.</p>
-            </motion.div>
+            {[
+              { num: '1', title: 'Speak', desc: 'Tap the button and ask "What\'s around me?"' },
+              { num: '2', title: 'Capture', desc: 'Your camera takes a snapshot of the scene.' },
+              { num: '3', title: 'Listen', desc: 'Hear a clear description of your surroundings.' }
+            ].map(step => (
+              <motion.div 
+                key={step.num}
+                className="how__step"
+                whileHover={{ y: -8 }}
+              >
+                <div className="how__step-num">{step.num}</div>
+                <h3>{step.title}</h3>
+                <p>{step.desc}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
       </Section>
 
-      {/* The difference - Side by side comparison */}
       <Section className="difference">
         <div className="difference__container">
           <div className="difference__text">
             <span className="section-tag">What makes us different</span>
-            <h2 className="difference__title">
-              It remembers.
-            </h2>
+            <h2 className="difference__title">It remembers.</h2>
             <p className="difference__desc">
-              Ask "What's around me?" and then follow up with "Where was the chair?" 
-              — SonarAI remembers the scene and can answer questions about it.
+              Ask "What's around me?" then follow up with "Where was the chair?" 
+              — SonarAI remembers the scene and answers questions about it.
             </p>
             <p className="difference__desc">
               Most tools give you a one-time answer. We give you a conversation.
@@ -155,16 +122,11 @@ const Home = () => {
           
           <div className="difference__visual">
             <div className="difference__chat">
-              <div className="difference__bubble difference__bubble--user">
-                What's around me?
-              </div>
+              <div className="difference__bubble difference__bubble--user">What's around me?</div>
               <div className="difference__bubble difference__bubble--ai">
-                You're in a living room. There's a couch to your left, a coffee table ahead, 
-                and a doorway on your right.
+                You're in a living room. There's a couch to your left, a coffee table ahead, and a doorway on your right.
               </div>
-              <div className="difference__bubble difference__bubble--user">
-                Is the path to the door clear?
-              </div>
+              <div className="difference__bubble difference__bubble--user">Is the path to the door clear?</div>
               <div className="difference__bubble difference__bubble--ai">
                 Yes, there's nothing blocking the way to the doorway on your right.
               </div>
@@ -173,36 +135,21 @@ const Home = () => {
         </div>
       </Section>
 
-      {/* Vision - Full width statement */}
       <Section className="vision">
         <div className="vision__container">
           <h2 className="vision__text">
-            We're building the <em>intelligence layer</em> for 
-            accessible smart glasses. This demo is the first step.
+            We're building the <em>intelligence layer</em> for accessible smart glasses. This demo is the first step.
           </h2>
         </div>
       </Section>
 
-      {/* CTA - Final push */}
       <Section className="final-cta">
         <div className="final-cta__container">
-          <h2 className="final-cta__title">
-            Try it yourself
-          </h2>
-          <p className="final-cta__desc">
-            All you need is a browser with camera and microphone access.
-          </p>
-          <Link to="/demo" className="final-cta__btn">
-            Launch Demo
-            <span>→</span>
-          </Link>
-          
+          <h2 className="final-cta__title">Try it yourself</h2>
+          <p className="final-cta__desc">All you need is a browser with camera and microphone access.</p>
+          <Link to="/demo" className="final-cta__btn">Launch Demo <span>→</span></Link>
           <div className="final-cta__links">
-            <a 
-              href="https://github.com/SaadSafeer4/sonarai" 
-              target="_blank" 
-              rel="noopener noreferrer"
-            >
+            <a href="https://github.com/SaadSafeer4/sonarai" target="_blank" rel="noopener noreferrer">
               View on GitHub
             </a>
           </div>
@@ -210,6 +157,4 @@ const Home = () => {
       </Section>
     </div>
   );
-};
-
-export default Home;
+}
