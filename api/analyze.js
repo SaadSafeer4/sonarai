@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     const groq = new Groq({ apiKey });
     
     const result = await groq.chat.completions.create({
-      model: 'llama-3.2-90b-vision-preview',
+      model: 'llama-3.2-11b-vision-preview',
       messages: [
         {
           role: 'user',

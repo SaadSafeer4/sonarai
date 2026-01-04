@@ -34,7 +34,7 @@ app.post('/api/analyze', async (req, res) => {
     if (!image) return res.status(400).json({ error: 'No image provided' });
 
     const result = await groq.chat.completions.create({
-      model: 'llama-3.2-90b-vision-preview',
+      model: 'llama-3.2-11b-vision-preview',
       messages: [
         {
           role: 'user',
