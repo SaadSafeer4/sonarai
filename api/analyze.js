@@ -23,7 +23,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout:free',
+        model: 'qwen/qwen-2-vl-7b-instruct:free',
         messages: [{
           role: 'user',
           content: [
