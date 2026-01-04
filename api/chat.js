@@ -1,6 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 
-const CHAT_PROMPT = `You are a helpful assistant for a blind person using smart glasses.
+const SYSTEM_PROMPT = `You are a helpful assistant for a blind person using smart glasses.
 Be concise (1-3 sentences). Use spatial language. Say "I notice" instead of "I see".
 You have access to the most recent scene description to answer follow-up questions.`;
 
@@ -9,37 +9,37 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'API key not configured' });
+    return res.status(500).json({ error: 'GROQ_API_KEY not configured' });
   }
 
   try {
     const { message, sceneContext, conversationHistory = [] } = req.body;
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const groq = new Groq({ apiKey });
     
-    let prompt = CHAT_PROMPT;
-    if (sceneContext) prompt += `\n\nScene: "${sceneContext}"`;
-    else prompt += '\n\nNo scene captured yet.';
-    
-    if (conversationHistory.length) {
-      prompt += '\n\nRecent:';
-      conversationHistory.slice(-4).forEach(t => {
-        prompt += `\n${t.role}: ${t.content}`;
-      });
-    }
-    
-    prompt += `\n\nUser: ${message}\nAssistant:`;
-    
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    let systemContent = SYSTEM_PROMPT;
+    if (sceneContext) systemContent += `\n\nCurrent scene: "${sceneContext}"`;
+    else systemContent += '\n\nNo scene captured yet.';
+
+    const messages = [
+      { role: 'system', content: systemContent },
+      ...conversationHistory.slice(-4).map(h => ({ role: h.role, content: h.content })),
+      { role: 'user', content: message }
+    ];
+
+    const result = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages,
+      max_tokens: 200
+    });
+
+    const response = result.choices[0]?.message?.content || 'Could not generate response';
     res.json({ response });
   } catch (err) {
     console.error('[Chat Error]', err.message);
     res.status(500).json({ error: 'Failed to generate response', details: err.message });
   }
 }
-
