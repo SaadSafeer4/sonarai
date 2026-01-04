@@ -637,6 +637,11 @@ main {
   animation: pulse 2s ease infinite;
 }
 
+.demo__camera-dot--off {
+  background: var(--ink-muted);
+  animation: none;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

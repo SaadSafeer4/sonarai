@@ -111,17 +111,23 @@ export default function Demo() {
       let response;
       
       if (needsCapture) {
-        await speak('Let me take a look.', true);
-        setCurrentStatus('Capturing...');
-        
-        const image = captureImage();
-        if (!image) throw new Error('Camera not available');
-        
-        setCurrentStatus('Analyzing...');
-        const scene = await analyzeScene(image);
-        
-        setCurrentStatus('Thinking...');
-        response = await generateResponse(spokenText, scene);
+        if (!cameraReady) {
+          response = "Camera is not available. Please allow camera access and refresh the page.";
+        } else {
+          await speak('Let me take a look.', true);
+          setCurrentStatus('Capturing...');
+          
+          const image = captureImage();
+          if (!image) {
+            response = "Could not capture image. Make sure camera is working.";
+          } else {
+            setCurrentStatus('Analyzing...');
+            const scene = await analyzeScene(image);
+            
+            setCurrentStatus('Thinking...');
+            response = await generateResponse(spokenText, scene);
+          }
+        }
       } else if (sceneMemory) {
         setCurrentStatus('Thinking...');
         response = await generateResponse(spokenText);
@@ -135,7 +141,10 @@ export default function Demo() {
       setCurrentStatus('Ready to listen');
     } catch (err) {
       console.error(err);
-      const msg = "Sorry, something went wrong. Please try again.";
+      let msg = "Sorry, something went wrong. Please try again.";
+      if (err.message?.includes('API error')) {
+        msg = "Could not connect to the AI. Check your internet connection.";
+      }
       await speak(msg, true);
       setLastResponse(msg);
       setCurrentStatus('Ready to listen');
@@ -249,8 +258,8 @@ export default function Demo() {
         >
           <video ref={videoRef} autoPlay playsInline muted className="demo__video" />
           <div className="demo__camera-label">
-            <span className="demo__camera-dot" />
-            LIVE
+            <span className={`demo__camera-dot ${!cameraReady ? 'demo__camera-dot--off' : ''}`} />
+            {cameraReady ? 'LIVE' : 'NO CAMERA'}
           </div>
         </motion.div>
 
