@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
     // Use Hugging Face's free inference API with LLaVA
     const response = await fetch(
-      'https://api-inference.huggingface.co/models/llava-hf/llava-1.5-7b-hf',
+      'https://router.huggingface.co/hf-inference/models/llava-hf/llava-1.5-7b-hf',
       {
         method: 'POST',
         headers: {
