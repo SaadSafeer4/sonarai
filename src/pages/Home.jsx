@@ -1,218 +1,215 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useScroll, useTransform, useInView } from 'framer-motion';
+
+// Animated section wrapper
+const Section = ({ children, className = '' }) => {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: '-100px' });
+  
+  return (
+    <motion.section
+      ref={ref}
+      initial={{ opacity: 0, y: 60 }}
+      animate={isInView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.section>
+  );
+};
 
 const Home = () => {
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.2,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.5,
-        ease: "easeOut",
-      },
-    },
-  };
-
-  const features = [
-    {
-      icon: "🎤",
-      title: "Voice First",
-      description: "Fully usable without looking at the screen. Just speak and listen."
-    },
-    {
-      icon: "👁️",
-      title: "Scene Understanding",
-      description: "AI-powered vision that describes your surroundings with spatial awareness."
-    },
-    {
-      icon: "🧠",
-      title: "Short-Term Memory",
-      description: "Ask follow-up questions. The system remembers what it saw."
-    },
-    {
-      icon: "🎧",
-      title: "Audio Narration",
-      description: "Clear, conversational descriptions optimized for safety."
-    }
-  ];
-
-  const steps = [
-    { num: "01", title: "Tap to Speak", desc: "Press the button and ask what's around you." },
-    { num: "02", title: "AI Analyzes", desc: "Camera captures the scene, AI understands it." },
-    { num: "03", title: "Listen", desc: "Receive a clear, spatial description via voice." },
-  ];
+  const containerRef = useRef(null);
+  const { scrollYProgress } = useScroll();
+  
+  // Parallax transforms
+  const heroY = useTransform(scrollYProgress, [0, 0.3], [0, -100]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
 
   return (
-    <div className="home">
-      {/* Hero Section */}
+    <div ref={containerRef} className="home">
+      {/* Hero - Full viewport with parallax */}
       <motion.section 
         className="hero"
-        initial="hidden"
-        animate="visible"
-        variants={containerVariants}
+        style={{ y: heroY }}
       >
+        <motion.div 
+          className="hero__bg"
+          style={{ opacity: heroOpacity }}
+        />
+        
         <div className="hero__content">
-          <motion.span className="hero__badge" variants={itemVariants}>
-            ACCESSIBILITY AI
-          </motion.span>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="hero__tag"
+          >
+            For the visually impaired
+          </motion.div>
           
-          <motion.h1 className="hero__title" variants={itemVariants}>
-            See the World<br />
-            <span className="hero__title-accent">Through Sound</span>
+          <motion.h1 
+            className="hero__title"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3 }}
+          >
+            Your eyes,<br />
+            <span className="hero__title-em">reimagined</span>
           </motion.h1>
           
-          <motion.div className="hero__divider" variants={itemVariants} />
-          
-          <motion.p className="hero__subtitle" variants={itemVariants}>
-            SonarAI helps blind and low-vision users understand their surroundings 
-            through voice interaction. The intelligence layer for future smart glasses.
+          <motion.p 
+            className="hero__desc"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.5 }}
+          >
+            SonarAI describes the world around you through voice. 
+            Ask what's nearby, and listen to understand your surroundings.
           </motion.p>
           
-          <motion.div className="hero__ctas" variants={itemVariants}>
-            <Link to="/demo" className="btn btn--primary">
-              TRY THE DEMO
-              <svg className="btn__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </Link>
-            <Link to="/about" className="btn btn--secondary">
-              LEARN MORE
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.7 }}
+          >
+            <Link to="/demo" className="hero__cta">
+              Try the demo
+              <span className="hero__cta-arrow">→</span>
             </Link>
           </motion.div>
         </div>
-
+        
         <motion.div 
-          className="hero__visual"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, delay: 0.3 }}
+          className="hero__scroll"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2 }}
         >
-          <div className="hero__visual-circle">
-            <div className="hero__visual-pulse" />
-            <div className="hero__visual-icon">◉</div>
-          </div>
+          <span>Scroll to explore</span>
+          <div className="hero__scroll-line" />
         </motion.div>
       </motion.section>
 
-      {/* How It Works */}
-      <section className="section section--alt">
-        <div className="section__container">
-          <div className="section__header">
-            <span className="section__label">HOW IT WORKS</span>
-            <h2 className="section__title">Three Simple Steps</h2>
-            <div className="section__divider" />
-          </div>
-
-          <div className="steps">
-            {steps.map((step, index) => (
-              <motion.div 
-                key={step.num}
-                className="step"
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-              >
-                <span className="step__num">{step.num}</span>
-                <h3 className="step__title">{step.title}</h3>
-                <p className="step__desc">{step.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section className="section">
-        <div className="section__container">
-          <div className="section__header">
-            <span className="section__label">FEATURES</span>
-            <h2 className="section__title">Built for Accessibility</h2>
-            <div className="section__divider" />
-          </div>
-
-          <div className="features">
-            {features.map((feature, index) => (
-              <motion.div 
-                key={feature.title}
-                className="feature"
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-              >
-                <span className="feature__icon">{feature.icon}</span>
-                <h3 className="feature__title">{feature.title}</h3>
-                <p className="feature__desc">{feature.description}</p>
-              </motion.div>
-            ))}
+      {/* How it works - Staggered cards */}
+      <Section className="how">
+        <div className="how__container">
+          <span className="section-tag">How it works</span>
+          <h2 className="how__title">
+            Three words.<br />
+            Complete awareness.
+          </h2>
+          
+          <div className="how__steps">
+            <motion.div 
+              className="how__step"
+              whileHover={{ y: -8 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="how__step-num">1</div>
+              <h3>Speak</h3>
+              <p>Tap the button and ask "What's around me?"</p>
+            </motion.div>
+            
+            <motion.div 
+              className="how__step"
+              whileHover={{ y: -8 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="how__step-num">2</div>
+              <h3>Capture</h3>
+              <p>Your camera takes a snapshot of the scene.</p>
+            </motion.div>
+            
+            <motion.div 
+              className="how__step"
+              whileHover={{ y: -8 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="how__step-num">3</div>
+              <h3>Listen</h3>
+              <p>Hear a clear description of your surroundings.</p>
+            </motion.div>
           </div>
         </div>
-      </section>
+      </Section>
 
-      {/* Differentiator Section */}
-      <section className="section section--highlight">
-        <div className="section__container">
-          <motion.div 
-            className="highlight"
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <span className="highlight__label">KEY DIFFERENTIATOR</span>
-            <h2 className="highlight__title">Short-Term Memory</h2>
-            <div className="highlight__divider" />
-            <p className="highlight__text">
-              Unlike existing solutions, SonarAI remembers what it saw. Ask "What's around me?" 
-              and then follow up with "Where was the chair you mentioned?" — and get a contextual answer.
+      {/* The difference - Side by side comparison */}
+      <Section className="difference">
+        <div className="difference__container">
+          <div className="difference__text">
+            <span className="section-tag">What makes us different</span>
+            <h2 className="difference__title">
+              It remembers.
+            </h2>
+            <p className="difference__desc">
+              Ask "What's around me?" and then follow up with "Where was the chair?" 
+              — SonarAI remembers the scene and can answer questions about it.
             </p>
-            <p className="highlight__text">
-              This simple feature transforms the experience from a one-shot query to a natural conversation.
+            <p className="difference__desc">
+              Most tools give you a one-time answer. We give you a conversation.
             </p>
-          </motion.div>
+          </div>
+          
+          <div className="difference__visual">
+            <div className="difference__chat">
+              <div className="difference__bubble difference__bubble--user">
+                What's around me?
+              </div>
+              <div className="difference__bubble difference__bubble--ai">
+                You're in a living room. There's a couch to your left, a coffee table ahead, 
+                and a doorway on your right.
+              </div>
+              <div className="difference__bubble difference__bubble--user">
+                Is the path to the door clear?
+              </div>
+              <div className="difference__bubble difference__bubble--ai">
+                Yes, there's nothing blocking the way to the doorway on your right.
+              </div>
+            </div>
+          </div>
         </div>
-      </section>
+      </Section>
 
-      {/* CTA Section */}
-      <section className="section section--cta">
-        <div className="section__container">
-          <motion.div 
-            className="cta-block"
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <h2 className="cta-block__title">Experience It Yourself</h2>
-            <p className="cta-block__text">
-              Try the demo now. All you need is a browser, camera, and microphone.
-            </p>
-            <Link to="/demo" className="btn btn--light">
-              LAUNCH DEMO
-              <svg className="btn__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </Link>
-          </motion.div>
+      {/* Vision - Full width statement */}
+      <Section className="vision">
+        <div className="vision__container">
+          <h2 className="vision__text">
+            We're building the <em>intelligence layer</em> for 
+            accessible smart glasses. This demo is the first step.
+          </h2>
         </div>
-      </section>
+      </Section>
+
+      {/* CTA - Final push */}
+      <Section className="final-cta">
+        <div className="final-cta__container">
+          <h2 className="final-cta__title">
+            Try it yourself
+          </h2>
+          <p className="final-cta__desc">
+            All you need is a browser with camera and microphone access.
+          </p>
+          <Link to="/demo" className="final-cta__btn">
+            Launch Demo
+            <span>→</span>
+          </Link>
+          
+          <div className="final-cta__links">
+            <a 
+              href="https://github.com/SaadSafeer4/sonarai" 
+              target="_blank" 
+              rel="noopener noreferrer"
+            >
+              View on GitHub
+            </a>
+          </div>
+        </div>
+      </Section>
     </div>
   );
 };
 
 export default Home;
-
