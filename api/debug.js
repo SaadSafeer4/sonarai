@@ -1,9 +1,9 @@
 export default function handler(req, res) {
-  const key = process.env.GEMINI_API_KEY;
+  const groq = process.env.GROQ_API_KEY;
+  const gemini = process.env.GEMINI_API_KEY;
   res.json({ 
-    hasKey: !!key,
-    keyLength: key ? key.length : 0,
-    keyPrefix: key ? key.substring(0, 8) + '...' : 'none'
+    groq: groq ? `${groq.substring(0, 8)}... (${groq.length} chars)` : 'NOT SET',
+    gemini: gemini ? `${gemini.substring(0, 8)}... (${gemini.length} chars)` : 'NOT SET'
   });
 }
 
