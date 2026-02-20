@@ -21,14 +21,13 @@ export default function Demo() {
   const recognitionRef = useRef(null);
   const streamRef = useRef(null);
 
+  // Speak a single utterance and await completion (for one-off messages)
   const speak = useCallback((text, priority = false) => {
     return new Promise((resolve) => {
       if (priority) window.speechSynthesis.cancel();
-
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.lang = 'en-US';
-
       const voices = window.speechSynthesis.getVoices();
       const english = voices.filter(v => v.lang.startsWith('en'));
       const voice = english.find(v =>
@@ -36,7 +35,6 @@ export default function Demo() {
         v.name.includes('Zira') ||
         v.name.includes('Samantha')
       ) || english[0] || voices[0];
-
       if (voice) utterance.voice = voice;
       utterance.onend = resolve;
       utterance.onerror = resolve;
@@ -64,45 +62,94 @@ export default function Demo() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || !cameraReady) return null;
-
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
     return canvas.toDataURL('image/jpeg', 0.8);
   }, [cameraReady]);
 
-  const analyzeScene = useCallback(async (imageData) => {
-    const res = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: imageData })
-    });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    const data = await res.json();
-    setSceneMemory(data.description);
-    return data.description;
+  // Queue a sentence to TTS without waiting — for streaming sentence-by-sentence playback
+  const getPreferredVoice = useCallback(() => {
+    const voices = window.speechSynthesis.getVoices();
+    const english = voices.filter(v => v.lang.startsWith('en'));
+    return english.find(v =>
+      v.name.includes('Google US') ||
+      v.name.includes('Zira') ||
+      v.name.includes('Samantha')
+    ) || english[0] || voices[0];
   }, []);
 
-  const generateResponse = useCallback(async (userMessage, sceneDescription = null) => {
+  const speakQueued = useCallback((text) => {
+    if (!text.trim()) return;
+    const utt = new SpeechSynthesisUtterance(text.trim());
+    utt.rate = 1.0;
+    utt.lang = 'en-US';
+    const voice = getPreferredVoice();
+    if (voice) utt.voice = voice;
+    window.speechSynthesis.speak(utt);
+  }, [getPreferredVoice]);
+
+  // Stream response from /api/chat, speaking sentences as they arrive
+  const streamResponse = useCallback(async (userMessage, image = null) => {
+    window.speechSynthesis.cancel();
+
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: userMessage,
-        sceneContext: sceneDescription || sceneMemory,
+        image,
+        sceneContext: image ? null : sceneMemory,
         conversationHistory
       })
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
-    const data = await res.json();
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+
+    // Flush complete sentences from buffer to TTS queue
+    const flush = (final = false) => {
+      if (final) {
+        if (buffer.trim()) speakQueued(buffer.trim());
+        buffer = '';
+        return;
+      }
+      // Only speak a sentence when followed by whitespace (avoids cutting mid-sentence)
+      let idx;
+      while ((idx = buffer.search(/[.!?]\s/)) !== -1) {
+        speakQueued(buffer.slice(0, idx + 1));
+        buffer = buffer.slice(idx + 1).trimStart();
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const d = JSON.parse(line.slice(6));
+          if (d.text) { fullText += d.text; buffer += d.text; flush(); }
+          if (d.done) flush(true);
+        } catch {}
+      }
+    }
+    flush(true);
+
+    // Update scene memory if this was a visual query
+    if (image) setSceneMemory(fullText);
 
     setConversationHistory(prev => [
       ...prev.slice(-6),
       { role: 'user', content: userMessage },
-      { role: 'assistant', content: data.response }
+      { role: 'assistant', content: fullText }
     ]);
-    return data.response;
-  }, [sceneMemory, conversationHistory]);
+
+    return fullText;
+  }, [sceneMemory, conversationHistory, speakQueued]);
 
   const processUserInput = useCallback(async (spokenText) => {
     setIsProcessing(true);
@@ -113,50 +160,58 @@ export default function Demo() {
       .some(word => lower.includes(word));
 
     try {
-      let response;
-
-      if (needsCapture) {
-        if (!cameraReady) {
-          response = "Camera is not available. Please allow camera access and refresh the page.";
-        } else {
-          await speak('Let me take a look.', true);
-          setCurrentStatus('Capturing...');
-
-          const image = captureImage();
-          if (!image) {
-            response = "Could not capture image. Make sure camera is working.";
-          } else {
-            setCurrentStatus('Analyzing...');
-            const scene = await analyzeScene(image);
-
-            setCurrentStatus('Thinking...');
-            response = await generateResponse(spokenText, scene);
-          }
-        }
-      } else if (sceneMemory) {
-        setCurrentStatus('Thinking...');
-        response = await generateResponse(spokenText);
-      } else {
-        response = "I don't have any scene in memory yet. Try asking 'What's around me?'";
+      // Guard: no scene and no visual query
+      if (!needsCapture && !sceneMemory) {
+        const msg = "I don't have any scene in memory yet. Try asking 'What's around me?'";
+        setLastResponse(msg);
+        await speak(msg, true);
+        setCurrentStatus('Ready to listen');
+        return;
       }
 
+      let image = null;
+      if (needsCapture) {
+        if (!cameraReady) {
+          const msg = 'Camera is not available. Please allow camera access and refresh.';
+          setLastResponse(msg);
+          await speak(msg, true);
+          setCurrentStatus('Ready to listen');
+          return;
+        }
+        setCurrentStatus('Capturing...');
+        image = captureImage();
+      }
+
+      setCurrentStatus('Thinking...');
+      const response = await streamResponse(spokenText, image);
       setLastResponse(response);
+
+      // Wait for the TTS queue to drain before accepting next input
       setCurrentStatus('Speaking...');
-      await speak(response, true);
+      await new Promise(resolve => {
+        const poll = setInterval(() => {
+          if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+            clearInterval(poll);
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => { clearInterval(poll); resolve(); }, 15000);
+      });
+
       setCurrentStatus('Ready to listen');
     } catch (err) {
       console.error(err);
-      let msg = "Sorry, something went wrong. Please try again.";
-      if (err.message?.includes('API error')) {
-        msg = "Could not connect to the AI. Check your internet connection.";
-      }
-      await speak(msg, true);
+      window.speechSynthesis.cancel();
+      const msg = err.message?.includes('API')
+        ? 'Could not connect to AI. Check your connection.'
+        : 'Sorry, something went wrong. Please try again.';
       setLastResponse(msg);
+      await speak(msg, true);
       setCurrentStatus('Ready to listen');
     } finally {
       setIsProcessing(false);
     }
-  }, [captureImage, analyzeScene, generateResponse, sceneMemory, speak]);
+  }, [captureImage, streamResponse, sceneMemory, speak, cameraReady]);
 
   const startListening = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -210,9 +265,7 @@ export default function Demo() {
       if (e.error === 'no-speech') return;
       setIsListening(false);
       setCurrentStatus('Ready to listen');
-      if (e.error === 'not-allowed') {
-        speak('Please allow microphone access.');
-      }
+      if (e.error === 'not-allowed') speak('Please allow microphone access.');
     };
 
     recognition.onend = () => {
@@ -251,7 +304,6 @@ export default function Demo() {
 
   const status = isListening ? 'listening' : isProcessing ? 'processing' : 'ready';
 
-  // Streaming mode delegates entirely to StreamingMode component
   if (mode === 'streaming') {
     return (
       <>

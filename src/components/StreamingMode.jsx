@@ -1,14 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { RealtimeVision } from 'overshoot';
 
-const NAVIGATION_PROMPT = `You are a visual assistant for blind users navigating their environment.
-Describe what you see focusing on:
-1. Obstacles and hazards (highest priority)
-2. Clear paths for navigation
-3. Spatial layout using directional language (left, right, ahead, behind)
-Keep responses under 3 sentences. Be specific about distances and directions.
-Example: "Clear path ahead. Chair on your left at 3 o'clock. Doorway on your right."`;
+const FRAME_PROMPT = 'Describe what you see for a blind person navigating. Focus on: obstacles and hazards first, then clear paths, then spatial layout. Use clock positions. Under 3 sentences.';
 
 // Jaccard similarity to detect near-duplicate descriptions
 function wordSimilarity(a, b) {
@@ -32,13 +25,17 @@ export default function StreamingMode() {
   const [metrics, setMetrics] = useState({ framesProcessed: 0, newDescriptions: 0, sessionStart: null });
   const [error, setError] = useState(null);
 
-  const visionRef = useRef(null);
   const videoRef = useRef(null);
-  // Refs avoid stale closure issues in SDK callbacks
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const intervalRef = useRef(null);
+
+  // Refs avoid stale closure issues in async callbacks
   const isStreamingRef = useRef(false);
   const lastDescriptionRef = useRef('');
   const isSpeakingRef = useRef(false);
   const isProcessingRef = useRef(false);
+  const isAnalyzingRef = useRef(false);
 
   const speak = useCallback((text, priority = false) => {
     return new Promise((resolve) => {
@@ -60,99 +57,116 @@ export default function StreamingMode() {
     });
   }, []);
 
-  const startStreaming = useCallback(async () => {
-    const apiKey = import.meta.env.VITE_OVERSHOOT_API_KEY;
-    if (!apiKey) {
-      setError('VITE_OVERSHOOT_API_KEY is not set. Add it to your .env file and restart the dev server.');
-      return;
-    }
+  const captureFrameImage = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2) return null;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    // Lower quality for streaming — reduces payload and cost
+    return canvas.toDataURL('image/jpeg', 0.5);
+  }, []);
 
+  // Collect a full SSE response into a string
+  const collectSSE = async (res) => {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const d = JSON.parse(line.slice(6));
+          if (d.text) text += d.text;
+        } catch {}
+      }
+    }
+    return text;
+  };
+
+  const startStreaming = useCallback(async () => {
     setError(null);
     setCurrentStatus('Connecting...');
 
     try {
-      const vision = new RealtimeVision({
-        apiKey,
-        // Use "environment" for rear camera (navigation). Falls back gracefully on desktop.
-        source: { type: 'camera', cameraFacing: 'environment' },
-        model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
-        prompt: NAVIGATION_PROMPT,
-        mode: 'frame',
-        // Analyze a frame every 2 seconds — enough for navigation without overwhelming TTS
-        frameProcessing: { interval_seconds: 2 },
-        // 80 tokens / 2s interval = 40 effective tokens/sec, well within the 128/s limit
-        maxOutputTokens: 80,
-        onResult: (result) => {
-          if (!result.ok || !result.result?.trim()) return;
-          const description = result.result.trim();
-
-          setMetrics(prev => ({ ...prev, framesProcessed: prev.framesProcessed + 1 }));
-
-          // Skip if scene hasn't changed meaningfully (>75% word overlap)
-          const isSimilar = wordSimilarity(description, lastDescriptionRef.current) > 0.75;
-          if (isSimilar) return;
-
-          lastDescriptionRef.current = description;
-          setSceneMemory(description);
-          setLastResponse(description);
-          setMetrics(prev => ({ ...prev, newDescriptions: prev.newDescriptions + 1 }));
-
-          // Don't interrupt if user is mid-question
-          if (!isSpeakingRef.current && !isProcessingRef.current) {
-            isSpeakingRef.current = true;
-            speak(description).then(() => { isSpeakingRef.current = false; });
-          }
-        },
-        onError: (err) => {
-          console.error('[Overshoot]', err);
-          const msg =
-            err.name === 'UnauthorizedError'
-              ? 'Invalid API key. Check VITE_OVERSHOOT_API_KEY in your .env file.'
-              : `Stream error: ${err.message}`;
-          setError(msg);
-          isStreamingRef.current = false;
-          setIsStreaming(false);
-          setCurrentStatus('Error — try again');
-        },
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
-
-      await vision.start();
-      visionRef.current = vision;
-      isStreamingRef.current = true;
-      setIsStreaming(true);
-      setCurrentStatus('Streaming...');
-      setMetrics({ framesProcessed: 0, newDescriptions: 0, sessionStart: Date.now() });
-
-      // Wire the camera feed into the video element for sighted helpers
-      const stream = vision.getMediaStream();
-      if (stream && videoRef.current) {
+      if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
+        streamRef.current = stream;
       }
-
-      speak('Streaming started. I will describe your surroundings as they change.', true);
     } catch (err) {
-      console.error('[Stream start]', err);
-      setError(err.message || 'Failed to start stream. Check camera permissions.');
-      isStreamingRef.current = false;
-      setIsStreaming(false);
+      setError('Camera not available: ' + err.message);
       setCurrentStatus('Ready');
+      return;
     }
-  }, [speak]);
+
+    isStreamingRef.current = true;
+    setIsStreaming(true);
+    setCurrentStatus('Streaming...');
+    setMetrics({ framesProcessed: 0, newDescriptions: 0, sessionStart: Date.now() });
+    speak('Streaming started. I will describe your surroundings as they change.', true);
+
+    intervalRef.current = setInterval(async () => {
+      // Skip if already talking, handling a question, or mid-analysis
+      if (isSpeakingRef.current || isProcessingRef.current || isAnalyzingRef.current) return;
+
+      const image = captureFrameImage();
+      if (!image) return;
+
+      isAnalyzingRef.current = true;
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: FRAME_PROMPT, image })
+        });
+
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const description = await collectSSE(res);
+        if (!description.trim()) return;
+
+        setMetrics(prev => ({ ...prev, framesProcessed: prev.framesProcessed + 1 }));
+
+        // Skip if scene hasn't changed meaningfully (>75% word overlap)
+        if (wordSimilarity(description, lastDescriptionRef.current) > 0.75) return;
+
+        lastDescriptionRef.current = description;
+        setSceneMemory(description);
+        setLastResponse(description);
+        setMetrics(prev => ({ ...prev, newDescriptions: prev.newDescriptions + 1 }));
+
+        if (!isSpeakingRef.current && !isProcessingRef.current) {
+          isSpeakingRef.current = true;
+          speak(description).then(() => { isSpeakingRef.current = false; });
+        }
+      } catch (err) {
+        console.error('[Frame error]', err.message);
+      } finally {
+        isAnalyzingRef.current = false;
+      }
+    }, 2000);
+  }, [speak, captureFrameImage]);
 
   const stopStreaming = useCallback(async () => {
     window.speechSynthesis.cancel();
-    if (visionRef.current) {
-      await visionRef.current.stop();
-      visionRef.current = null;
-    }
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     isStreamingRef.current = false;
+    isAnalyzingRef.current = false;
     setIsStreaming(false);
     setCurrentStatus('Stopped');
     speak('Streaming stopped.', true);
   }, [speak]);
 
+  // Voice Q&A while streaming — calls /api/chat with current scene memory
   const generateResponse = useCallback(async (userMessage) => {
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -160,23 +174,22 @@ export default function StreamingMode() {
       body: JSON.stringify({
         message: userMessage,
         sceneContext: sceneMemory,
-        conversationHistory,
-      }),
+        conversationHistory
+      })
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
-    const data = await res.json();
+    const text = await collectSSE(res);
     setConversationHistory(prev => [
       ...prev.slice(-6),
       { role: 'user', content: userMessage },
-      { role: 'assistant', content: data.response },
+      { role: 'assistant', content: text }
     ]);
-    return data.response;
+    return text;
   }, [sceneMemory, conversationHistory]);
 
   const handleQuestion = useCallback(async (question) => {
     isProcessingRef.current = true;
     setIsProcessing(true);
-    // Pause ongoing scene description so the answer is audible
     window.speechSynthesis.cancel();
     isSpeakingRef.current = false;
     try {
@@ -202,7 +215,6 @@ export default function StreamingMode() {
     setTranscript('');
     setCurrentStatus('Listening...');
 
-    // Short audio cue
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = ctx.createOscillator();
@@ -261,16 +273,15 @@ export default function StreamingMode() {
     }
   }, [speak, handleQuestion]);
 
-  // Initialize voices and clean up on unmount
   useEffect(() => {
     window.speechSynthesis.getVoices();
     return () => {
-      visionRef.current?.stop();
+      clearInterval(intervalRef.current);
+      streamRef.current?.getTracks().forEach(t => t.stop());
       window.speechSynthesis.cancel();
     };
   }, []);
 
-  // Space bar shortcut for voice questions
   useEffect(() => {
     const onKey = (e) => {
       if (e.code === 'Space' && !isListening && !isProcessing) {
@@ -290,9 +301,11 @@ export default function StreamingMode() {
 
   return (
     <div className="demo">
+      {/* Hidden canvas used for frame capture */}
+      <canvas ref={canvasRef} className="demo__canvas" />
+
       <div className="demo__container">
 
-        {/* Camera preview */}
         <motion.div
           className="demo__camera"
           initial={{ opacity: 0, y: 20 }}
@@ -306,7 +319,6 @@ export default function StreamingMode() {
           </div>
         </motion.div>
 
-        {/* Error banner */}
         {error && (
           <div className="demo__error" role="alert">
             <span>{error}</span>
@@ -314,13 +326,11 @@ export default function StreamingMode() {
           </div>
         )}
 
-        {/* Status bar */}
         <div className="demo__status" aria-live="polite" aria-atomic="true">
           <div className={`demo__status-dot demo__status-dot--${statusVariant}`} />
           <span className="demo__status-text">{currentStatus}</span>
         </div>
 
-        {/* Start / Stop streaming */}
         <motion.button
           className={`demo__stream-btn ${isStreaming ? 'demo__stream-btn--active' : ''}`}
           onClick={isStreaming ? stopStreaming : startStreaming}
@@ -331,7 +341,6 @@ export default function StreamingMode() {
           <span className="demo__stream-label">{isStreaming ? 'Stop Streaming' : 'Start Streaming'}</span>
         </motion.button>
 
-        {/* Voice question button — only visible while streaming */}
         {isStreaming && (
           <motion.button
             className={`demo__speak-btn ${isListening ? 'demo__speak-btn--listening' : ''} ${isProcessing ? 'demo__speak-btn--processing' : ''}`}
@@ -363,7 +372,6 @@ export default function StreamingMode() {
           </motion.button>
         )}
 
-        {/* Transcript */}
         {transcript && (
           <motion.div className="demo__transcript" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <span className="demo__transcript-label">YOU SAID</span>
@@ -371,7 +379,6 @@ export default function StreamingMode() {
           </motion.div>
         )}
 
-        {/* Latest description or response */}
         {lastResponse && (
           <motion.div className="demo__response" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <span className="demo__response-label">DESCRIPTION</span>
@@ -379,7 +386,6 @@ export default function StreamingMode() {
           </motion.div>
         )}
 
-        {/* Scene memory */}
         <div className="demo__memory">
           <div className="demo__memory-header">
             <span className="demo__memory-icon">🧠</span>
@@ -394,7 +400,6 @@ export default function StreamingMode() {
           )}
         </div>
 
-        {/* Metrics — shown only after stream starts */}
         {metrics.sessionStart && (
           <div className="demo__metrics">
             <span className="demo__metrics-title">STREAM METRICS</span>
@@ -415,7 +420,6 @@ export default function StreamingMode() {
           </div>
         )}
 
-        {/* Help text */}
         <div className="demo__help">
           <span className="demo__help-title">
             {isStreaming ? 'STREAMING — TAP MIC OR SPACE TO ASK' : 'PRESS START TO BEGIN STREAMING'}
