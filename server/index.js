@@ -70,7 +70,7 @@ function executeToolCall(name, args, sceneContext) {
 // Unified chat + vision endpoint — handles both text-only and image+text requests
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, image, sceneContext, conversationHistory = [] } = req.body;
+    const { message, image, sceneContext, conversationHistory = [], maxTokens = 200 } = req.body;
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
     // SSE headers
@@ -111,7 +111,7 @@ app.post('/api/chat', async (req, res) => {
       model: 'gpt-4o-mini',
       messages,
       tools: TOOLS,
-      max_tokens: 200,
+      max_tokens: maxTokens,
       stream: true
     });
 
