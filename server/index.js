@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -11,7 +11,7 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const SYSTEM_PROMPT = `You are a concise assistant for a blind person using smart glasses.
 Respond in 1-3 short sentences. Use spatial language (left, right, ahead, behind, clock positions).
@@ -19,26 +19,32 @@ Say "I notice" not "I see". Prioritize safety-relevant information first.`;
 
 const TOOLS = [
   {
-    name: 'flag_hazard',
-    description: 'Flag a safety hazard or obstacle detected in the scene. Use this whenever you identify something dangerous — steps, obstacles, wet floors, low-hanging objects, moving vehicles.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        hazard: { type: 'string', description: 'Brief description of the hazard' },
-        urgency: { type: 'string', enum: ['low', 'medium', 'high'], description: 'How immediately dangerous this is' }
-      },
-      required: ['hazard', 'urgency']
+    type: 'function',
+    function: {
+      name: 'flag_hazard',
+      description: 'Flag a safety hazard or obstacle detected in the scene. Use this whenever you identify something dangerous — steps, obstacles, wet floors, low-hanging objects, moving vehicles.',
+      parameters: {
+        type: 'object',
+        properties: {
+          hazard: { type: 'string', description: 'Brief description of the hazard' },
+          urgency: { type: 'string', enum: ['low', 'medium', 'high'], description: 'How immediately dangerous this is' }
+        },
+        required: ['hazard', 'urgency']
+      }
     }
   },
   {
-    name: 'recall_memory',
-    description: 'Look up a specific detail from the most recent scene memory to answer a follow-up question about something previously observed.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'What specific detail to recall from memory' }
-      },
-      required: ['query']
+    type: 'function',
+    function: {
+      name: 'recall_memory',
+      description: 'Look up a specific detail from the most recent scene memory to answer a follow-up question about something previously observed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'What specific detail to recall from memory' }
+        },
+        required: ['query']
+      }
     }
   }
 ];
@@ -46,12 +52,12 @@ const TOOLS = [
 // In-memory hazard log (persists for the session)
 const hazardLog = [];
 
-function executeToolCall(name, input, sceneContext) {
+function executeToolCall(name, args, sceneContext) {
   if (name === 'flag_hazard') {
-    const entry = { ...input, timestamp: new Date().toISOString() };
+    const entry = { ...args, timestamp: new Date().toISOString() };
     hazardLog.push(entry);
     console.log('[Hazard flagged]', entry);
-    return `Hazard logged: ${input.hazard} (${input.urgency} urgency)`;
+    return `Hazard logged: ${args.hazard} (${args.urgency} urgency)`;
   }
   if (name === 'recall_memory') {
     return sceneContext
@@ -80,11 +86,10 @@ app.post('/api/chat', async (req, res) => {
     const userContent = image
       ? [
           {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: 'image/jpeg',
-              data: image.includes(',') ? image.split(',')[1] : image
+            type: 'image_url',
+            image_url: {
+              url: image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`,
+              detail: 'low'  // faster + cheaper; sufficient for scene description
             }
           },
           { type: 'text', text: message }
@@ -92,56 +97,80 @@ app.post('/api/chat', async (req, res) => {
       : message;
 
     const messages = [
+      { role: 'system', content: systemContent },
       ...conversationHistory.slice(-4).map(h => ({ role: h.role, content: h.content })),
       { role: 'user', content: userContent }
     ];
 
     let fullText = '';
+    let toolCalls = [];
     const toolsUsed = [];
 
-    // Stream the response — text tokens arrive immediately
-    const stream = anthropic.messages.stream({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system: systemContent,
+    // Stream response — text tokens arrive immediately
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages,
-      tools: TOOLS
+      tools: TOOLS,
+      max_tokens: 200,
+      stream: true
     });
 
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        fullText += event.delta.text;
-        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+
+      if (delta?.content) {
+        fullText += delta.content;
+        res.write(`data: ${JSON.stringify({ text: delta.content })}\n\n`);
+      }
+
+      // Accumulate tool call argument fragments across chunks
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          if (!toolCalls[tc.index]) {
+            toolCalls[tc.index] = { id: tc.id, name: tc.function?.name || '', arguments: '' };
+          }
+          if (tc.function?.name) toolCalls[tc.index].name = tc.function.name;
+          if (tc.function?.arguments) toolCalls[tc.index].arguments += tc.function.arguments;
+        }
       }
     }
 
-    const finalMsg = await stream.finalMessage();
-
     // Execute any tool calls the model made
-    const toolUseBlocks = finalMsg.content.filter(b => b.type === 'tool_use');
-    if (toolUseBlocks.length > 0) {
-      const toolResults = toolUseBlocks.map(block => {
-        const result = executeToolCall(block.name, block.input, sceneContext);
-        toolsUsed.push(block.name);
-        return { type: 'tool_result', tool_use_id: block.id, content: result };
+    toolCalls = toolCalls.filter(Boolean);
+    if (toolCalls.length > 0) {
+      const assistantToolMsg = {
+        role: 'assistant',
+        content: fullText || null,
+        tool_calls: toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: tc.arguments }
+        }))
+      };
+
+      const toolResultMsgs = toolCalls.map(tc => {
+        let args = {};
+        try { args = JSON.parse(tc.arguments); } catch {}
+        const result = executeToolCall(tc.name, args, sceneContext);
+        toolsUsed.push(tc.name);
+        return { role: 'tool', tool_call_id: tc.id, content: result };
       });
 
       // If model paused for tools before generating text, get the continuation
       if (!fullText.trim()) {
-        const continuation = await anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
+        const continuation = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [...messages, assistantToolMsg, ...toolResultMsgs],
           max_tokens: 200,
-          system: systemContent,
-          messages: [
-            ...messages,
-            { role: 'assistant', content: finalMsg.content },
-            { role: 'user', content: toolResults }
-          ],
-          tools: TOOLS
+          stream: true
         });
-        const contText = continuation.content.find(b => b.type === 'text')?.text || '';
-        fullText = contText;
-        if (contText) res.write(`data: ${JSON.stringify({ text: contText })}\n\n`);
+        for await (const chunk of continuation) {
+          const delta = chunk.choices[0]?.delta;
+          if (delta?.content) {
+            fullText += delta.content;
+            res.write(`data: ${JSON.stringify({ text: delta.content })}\n\n`);
+          }
+        }
       }
     }
 
@@ -162,7 +191,7 @@ app.post('/api/chat', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', model: 'claude-haiku-4-5-20251001', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', model: 'gpt-4o-mini', timestamp: new Date().toISOString() });
 });
 
 app.listen(PORT, () => {

@@ -28,9 +28,9 @@ Dev: `npm run dev` starts both server (port 3001) and Vite client (port 5173) co
 
 ---
 
-## AI Provider: Anthropic only
+## AI Provider: OpenAI only
 
-**Model:** `claude-haiku-4-5-20251001` — fastest Claude model, handles vision natively.
+**Model:** `gpt-4o-mini` — fast, cheap, vision-capable. Equivalent role to Claude Haiku.
 
 All AI goes through a single endpoint: `POST /api/chat`
 
@@ -46,7 +46,7 @@ Request shape:
 
 Response: SSE stream of `{ text: "..." }` chunks, terminated with `{ done: true, tools: [...] }`.
 
-**Why a single endpoint:** Previously used Together AI (vision) + Groq (chat) as two sequential calls (~2-3s total). Unified into one Claude Haiku call (~0.5-1s to first token).
+**Why a single endpoint:** Previously used Together AI (vision) + Groq (chat) as two sequential calls (~2-3s total). Unified into one gpt-4o-mini call (~0.5-1s to first token).
 
 ---
 
@@ -63,7 +63,7 @@ Two tools defined in `server/index.js`:
 - `flag_hazard` — model calls this when it detects obstacles/dangers. Logs to in-memory `hazardLog` array with timestamp.
 - `recall_memory` — model calls this to surface stored scene context when answering memory questions.
 
-Tool calls are executed server-side (no client round-trip). If model calls a tool before generating text, server runs the tool and makes a second Anthropic call for the continuation.
+Tool calls are executed server-side (no client round-trip). If model calls a tool before generating text, server runs the tool and makes a second OpenAI call for the continuation.
 
 ### Streaming TTS (traditional mode)
 `streamResponse()` in Demo.jsx:
@@ -88,9 +88,10 @@ This replaced the Overshoot third-party SDK — now the whole app uses one AI pr
 
 | Removed | Replaced with | Reason |
 |---|---|---|
-| Groq (`llama-3.1-8b-instant`) | Claude Haiku | Tool calling support, single provider |
-| Together AI (`Llama-Vision-Free`) | Claude Haiku (vision) | Eliminate second API call, one provider |
+| Groq (`llama-3.1-8b-instant`) | gpt-4o-mini | Tool calling support, single provider |
+| Together AI (`Llama-Vision-Free`) | gpt-4o-mini (vision) | Eliminate second API call, one provider |
 | Overshoot SDK | DIY `setInterval` + canvas | Removes dependency, full control, one API key |
+| Anthropic Claude Haiku | gpt-4o-mini | Switched to OpenAI key |
 
 ---
 
@@ -98,10 +99,10 @@ This replaced the Overshoot third-party SDK — now the whole app uses one AI pr
 
 Only one key needed:
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 ```
 
-Copy `.env.example` → `.env` and fill it in. Get key at console.anthropic.com.
+Copy `.env.example` → `.env` and fill it in. Get key at platform.openai.com/api-keys.
 
 ---
 
@@ -113,9 +114,9 @@ The project is used in Saad's job applications with this description:
 
 **Why each claim is true:**
 - *Full-stack / Express+React* — Express backend, React+Vite frontend, monorepo
-- *Multi-model LLM integration* — project has cycled through and integrated Gemini, OpenRouter, HuggingFace, OpenAI, Together AI, Groq, Overshoot, and now Anthropic; currently uses Haiku for all three tasks (vision, chat, streaming)
+- *Multi-model LLM integration* — project has cycled through and integrated Gemini, OpenRouter, HuggingFace, OpenAI, Together AI, Groq, Overshoot, and Anthropic; currently uses gpt-4o-mini for all three tasks (vision, chat, streaming)
 - *Scene memory for stateful conversations* — `sceneMemory` state + `conversationHistory` passed on every request
-- *Agentic* — genuine LLM tool calling via Anthropic's tool use API (`flag_hazard`, `recall_memory`)
+- *Agentic* — genuine LLM tool calling via OpenAI's function calling API (`flag_hazard`, `recall_memory`)
 - *Context-aware* — model has scene context + conversation history on every call
 
 ---

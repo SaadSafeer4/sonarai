@@ -1,7 +1,7 @@
 {
   "name": "sonarai",
   "version": "1.0.0",
-  "description": "SonarAI — voice-first AI assistant for blind/low-vision users. Full-stack Express/React app with Claude Haiku vision, streaming SSE responses, sentence-by-sentence TTS, scene memory, and agentic tool calling.",
+  "description": "SonarAI — voice-first AI assistant for blind/low-vision users. Full-stack Express/React app with gpt-4o-mini vision, streaming SSE responses, sentence-by-sentence TTS, scene memory, and agentic tool calling.",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -11,11 +11,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "framer-motion": "^12.23.26",
+    "openai": "^6.22.0",
     "react-router-dom": "^7.11.0"
   },
   "devDependencies": {
