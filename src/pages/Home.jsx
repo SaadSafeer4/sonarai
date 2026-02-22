@@ -81,27 +81,67 @@ export default function Home() {
         </motion.div>
       </motion.section>
 
-      <Section className="how">
-        <div className="how__container">
+      <Section className="approach">
+        <div className="approach__container">
           <span className="section-tag">How it works</span>
-          <h2 className="how__title">Three words.<br />Complete awareness.</h2>
-          
-          <div className="how__steps">
-            {[
-              { num: '1', title: 'Speak', desc: 'Tap the button and ask "What\'s around me?"' },
-              { num: '2', title: 'Capture', desc: 'Your camera takes a snapshot of the scene.' },
-              { num: '3', title: 'Listen', desc: 'Hear a clear description of your surroundings.' }
-            ].map(step => (
-              <motion.div 
-                key={step.num}
-                className="how__step"
-                whileHover={{ y: -8 }}
-              >
-                <div className="how__step-num">{step.num}</div>
-                <h3>{step.title}</h3>
-                <p>{step.desc}</p>
+          <h2 className="approach__title">Not every frame<br />tells a story.</h2>
+          <p className="approach__intro">
+            Traditional vision tools are stuck choosing between two extremes. SonarAI decides intelligently.
+          </p>
+
+          <div className="approach__compare">
+            {/* Traditional column */}
+            <div className="approach__col">
+              <div className="approach__col-header">
+                <span className="approach__col-label">Traditional</span>
+              </div>
+
+              <motion.div className="approach__method" whileHover={{ y: -4 }}>
+                <div className="approach__method-icon">📷</div>
+                <h3>Single Frame Capture</h3>
+                <p>Ask a question, get one frozen snapshot. Miss what came before it and what happens after.</p>
+                <div className="approach__method-cons">
+                  <span>✕ One moment, no context</span>
+                  <span>✕ Fully reactive — you must always ask</span>
+                </div>
               </motion.div>
-            ))}
+
+              <div className="approach__or">or</div>
+
+              <motion.div className="approach__method" whileHover={{ y: -4 }}>
+                <div className="approach__method-icon">📹</div>
+                <h3>Blind Continuous Streaming</h3>
+                <p>Analyze every frame, every second — whether the scene changed or not.</p>
+                <div className="approach__method-cons">
+                  <span>✕ Floods you with redundant descriptions</span>
+                  <span>✕ Wastes compute on unchanged scenes</span>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Arrow divider */}
+            <div className="approach__arrow">→</div>
+
+            {/* SonarAI column */}
+            <div className="approach__col">
+              <div className="approach__col-header">
+                <span className="approach__col-label approach__col-label--new">SonarAI</span>
+              </div>
+
+              <motion.div className="approach__method approach__method--new" whileHover={{ y: -4 }}>
+                <div className="approach__method-icon">🧠</div>
+                <h3>Intelligent Frame Selection</h3>
+                <p>
+                  An agentic AI monitors the scene continuously and decides when a frame is actually worth analyzing — only speaking when something meaningful changes.
+                </p>
+                <div className="approach__method-pros">
+                  <span>✓ Jaccard similarity skips duplicate frames</span>
+                  <span>✓ Proactively flags hazards without being asked</span>
+                  <span>✓ Scene memory answers follow-up questions</span>
+                  <span>✓ Single AI provider, zero latency switching</span>
+                </div>
+              </motion.div>
+            </div>
           </div>
         </div>
       </Section>

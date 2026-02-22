@@ -3,6 +3,52 @@ import { motion } from 'framer-motion';
 import ModeToggle from '../components/ModeToggle';
 import StreamingMode from '../components/StreamingMode';
 
+// Stock sample media (images via Unsplash CDN with CORS support, videos via Pexels)
+const SAMPLES = [
+  {
+    id: 'kitchen',
+    type: 'image',
+    label: 'Kitchen',
+    url: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=640&q=80',
+    thumb: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=200&q=60',
+  },
+  {
+    id: 'living-room',
+    type: 'image',
+    label: 'Living Room',
+    url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=640&q=80',
+    thumb: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=200&q=60',
+  },
+  {
+    id: 'street',
+    type: 'image',
+    label: 'City Street',
+    url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=640&q=80',
+    thumb: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=200&q=60',
+  },
+  {
+    id: 'grocery',
+    type: 'image',
+    label: 'Grocery Store',
+    url: 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=640&q=80',
+    thumb: 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&q=60',
+  },
+  {
+    id: 'park-walk',
+    type: 'video',
+    label: 'Park Walk',
+    url: 'https://videos.pexels.com/video-files/1390942/1390942-sd_960_540_25fps.mp4',
+    thumb: 'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=200&q=60',
+  },
+  {
+    id: 'market',
+    type: 'video',
+    label: 'Busy Market',
+    url: 'https://videos.pexels.com/video-files/2499611/2499611-sd_960_540_30fps.mp4',
+    thumb: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=60',
+  },
+];
+
 export default function Demo() {
   const [mode, setMode] = useState('traditional');
 
@@ -16,10 +62,13 @@ export default function Demo() {
   const [lastResponse, setLastResponse] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
 
+  const [selectedSample, setSelectedSample] = useState(null);
+
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const recognitionRef = useRef(null);
   const streamRef = useRef(null);
+  const sampleImageDataRef = useRef(null); // stores base64 for selected sample image
 
   // Speak a single utterance and await completion (for one-off messages)
   const speak = useCallback((text, priority = false) => {
@@ -44,6 +93,12 @@ export default function Demo() {
 
   const initializeCamera = useCallback(async () => {
     try {
+      // Clear any sample source before attaching camera stream
+      if (videoRef.current) {
+        videoRef.current.src = '';
+        videoRef.current.poster = '';
+        videoRef.current.loop = false;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
@@ -59,14 +114,76 @@ export default function Demo() {
   }, []);
 
   const captureImage = useCallback(() => {
+    // Use pre-loaded sample image data when a photo sample is selected
+    if (sampleImageDataRef.current) return sampleImageDataRef.current;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || !cameraReady) return null;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    return canvas.toDataURL('image/jpeg', 0.8);
+    try {
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      return canvas.toDataURL('image/jpeg', 0.8);
+    } catch {
+      return null; // tainted canvas (CORS) — handled upstream
+    }
   }, [cameraReady]);
+
+  // Load a sample image or video into the viewport for testing
+  const selectSample = useCallback((sample) => {
+    setSelectedSample(sample.id);
+    sampleImageDataRef.current = null;
+
+    // Stop live camera stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+
+    if (sample.type === 'image') {
+      // Preload image onto hidden canvas to get base64 (requires CORS support from CDN)
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        try {
+          sampleImageDataRef.current = canvas.toDataURL('image/jpeg', 0.8);
+        } catch {
+          console.warn('Could not preload sample image to canvas (CORS). Capture will be skipped.');
+        }
+      };
+      img.src = sample.url;
+
+      // Show image as poster in the video viewport
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+        videoRef.current.src = '';
+        videoRef.current.poster = sample.url;
+      }
+      setCameraReady(true);
+    } else if (sample.type === 'video') {
+      // Load video into the video element — frame capture works the same way
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.crossOrigin = 'anonymous';
+        videoRef.current.src = sample.url;
+        videoRef.current.loop = true;
+        videoRef.current.play().catch(() => {});
+      }
+      setCameraReady(true);
+    }
+  }, []);
+
+  const resetToCamera = useCallback(() => {
+    setSelectedSample(null);
+    sampleImageDataRef.current = null;
+    initializeCamera();
+  }, [initializeCamera]);
 
   // Queue a sentence to TTS without waiting — for streaming sentence-by-sentence playback
   const getPreferredVoice = useCallback(() => {
@@ -330,9 +447,44 @@ export default function Demo() {
           <video ref={videoRef} autoPlay playsInline muted className="demo__video" />
           <div className="demo__camera-label">
             <span className={`demo__camera-dot ${!cameraReady ? 'demo__camera-dot--off' : ''}`} />
-            {cameraReady ? 'LIVE' : 'NO CAMERA'}
+            {selectedSample ? 'SAMPLE' : cameraReady ? 'LIVE' : 'NO CAMERA'}
           </div>
         </motion.div>
+
+        {/* Sample media picker */}
+        <div className="demo__samples">
+          <span className="demo__samples-title">No camera? Try an example</span>
+          <div className="demo__samples-grid">
+            {SAMPLES.map(sample => (
+              <motion.button
+                key={sample.id}
+                className={`demo__sample-item ${selectedSample === sample.id ? 'demo__sample-item--active' : ''}`}
+                onClick={() => selectSample(sample)}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                aria-label={`Use ${sample.label} as input`}
+              >
+                <div
+                  className="demo__sample-thumb"
+                  style={{ backgroundImage: `url(${sample.thumb})` }}
+                >
+                  {sample.type === 'video' && (
+                    <div className="demo__sample-video-badge">▶</div>
+                  )}
+                </div>
+                <span className="demo__sample-label">{sample.label}</span>
+              </motion.button>
+            ))}
+          </div>
+          <div className="demo__samples-footer">
+            <span className="demo__samples-note">Photos by Unsplash · Videos by Pexels</span>
+            {selectedSample && (
+              <button className="demo__samples-reset" onClick={resetToCamera}>
+                ← Use my camera
+              </button>
+            )}
+          </div>
+        </div>
 
         <div className="demo__status">
           <div className={`demo__status-dot demo__status-dot--${status}`} />
